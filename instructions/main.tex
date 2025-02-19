@@ -1,0 +1,208 @@
+\documentclass[11pt]{article}
+\usepackage{amsmath, amssymb, amsthm, mathtools}
+\usepackage{graphicx}
+\usepackage{enumitem}
+\usepackage{fullpage}
+\usepackage{hyperref}
+
+\title{Homework Assignment: Robust MPC and CBF-Based Safety Filtering for the Dubins Car Model}
+\author{MAE 248: Safety for Autonomous Systems \\ Designer: Girish Krishnan}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\section{Introduction and Problem Statement}
+In this assignment, you will implement several control strategies for the Dubins car model. The objectives are to:
+\begin{enumerate}[label=(\alph*)]
+    \item Implement a \textbf{Standard Model Predictive Control (MPC)} method for trajectory planning.
+    \item Develop a \textbf{Robust MPC} formulation that accounts for bounded disturbances. You will consider different robust MPC methods (e.g., min-max formulation, tube-based MPC).
+    \item Implement a \textbf{Safety Filter} using Control Barrier Functions (CBF) that modifies a nominal control input to ensure safety with respect to obstacles.
+    \item Compare the performance of these controllers under various scenarios.
+\end{enumerate}
+
+The dynamics of the Dubins car are given by:
+\begin{align}
+    x_{k+1} &= x_k + v \cos(\theta_k)\, \Delta t, \label{eq:dyn_x} \\
+    y_{k+1} &= y_k + v \sin(\theta_k)\, \Delta t, \label{eq:dyn_y} \\
+    \theta_{k+1} &= \theta_k + u_k\, \Delta t, \label{eq:dyn_theta}
+\end{align}
+where $x_k, y_k \in \mathbb{R}$ denote the position, $\theta_k \in \mathbb{R}$ the heading, $v>0$ is a constant speed, and $u_k$ is the steering control input subject to 
+\[
+u_k \in \mathcal{U} = \{ u \in \mathbb{R} \mid -w_{\max} \le u \le w_{\max} \}.
+\]
+
+Obstacles in the environment are modeled as circles with centers $(o_x, o_y)$ and radii $r$. To guarantee safety, a margin $\delta > 0$ is added so that the safety condition for each obstacle is:
+\[
+(x - o_x)^2 + (y - o_y)^2 \ge (r + \delta)^2.
+\]
+
+\section{Part I: Standard MPC for the Dubins Car}
+\textbf{Objective:} Develop an MPC formulation that minimizes a cost function over a finite horizon while ensuring dynamic feasibility and obstacle avoidance.
+
+\subsection{Decision Variables and Dynamics Constraints}
+Define the state trajectory over a prediction horizon $N$:
+\[
+X = \begin{bmatrix} x_0 \\ x_1 \\ \vdots \\ x_N \end{bmatrix}, \quad
+Y = \begin{bmatrix} y_0 \\ y_1 \\ \vdots \\ y_N \end{bmatrix}, \quad
+\Theta = \begin{bmatrix} \theta_0 \\ \theta_1 \\ \vdots \\ \theta_N \end{bmatrix},
+\]
+and the control inputs:
+\[
+U = \begin{bmatrix} u_0 \\ u_1 \\ \vdots \\ u_{N-1} \end{bmatrix}.
+\]
+The dynamics \eqref{eq:dyn_x}--\eqref{eq:dyn_theta} are enforced as equality constraints:
+\[
+\begin{aligned}
+    x_{k+1} - x_k - v \cos(\theta_k)\, \Delta t &= 0, \\
+    y_{k+1} - y_k - v \sin(\theta_k)\, \Delta t &= 0, \\
+    \theta_{k+1} - \theta_k - u_k\, \Delta t &= 0, \quad \forall k=0,\ldots,N-1.
+\end{aligned}
+\]
+
+\subsection{Cost Function}
+Construct the cost function to penalize the final state error and control effort:
+\[
+J = \left( x_N - x_{\text{goal}} \right)^2 + \left( y_N - y_{\text{goal}} \right)^2 + \alpha \sum_{k=0}^{N-1} u_k^2,
+\]
+where $\alpha > 0$ is a small weight on the control effort.
+
+\subsection{Obstacle Avoidance Constraints}
+For each time step $k$ and each obstacle $(o_x, o_y, r)$, enforce:
+\[
+(x_k - o_x)^2 + (y_k - o_y)^2 \ge (r + \delta)^2.
+\]
+
+\subsection{Task}
+\begin{enumerate}[label=\arabic*.]
+    \item Formulate the full nonlinear programming problem (NLP) for the standard MPC.
+    \item Use CasADi to define the decision variables, cost function, and constraints.
+    \item Solve the NLP and return the first control input $u_0$.
+\end{enumerate}
+
+\section{Part II: Robust MPC Formulations}
+\textbf{Objective:} Extend the standard MPC formulation to account for disturbances $d_k$ that satisfy $\| d_k \| \le d_{\max}$. Two common robust MPC approaches are:
+\begin{enumerate}[label=(\alph*)]
+    \item \textbf{Min-Max MPC:} Formulate a min-max optimization problem that minimizes the worst-case cost over all admissible disturbance sequences.
+    \item \textbf{Tube-Based MPC:} Design a nominal MPC controller and an ancillary feedback controller to keep the system in a ``tube'' around the nominal trajectory.
+\end{enumerate}
+
+\subsection{Min-Max MPC}
+\begin{enumerate}[label=\arabic*.]
+    \item Write the disturbed dynamics:
+    \[
+    \begin{aligned}
+    x_{k+1} &= x_k + v \cos(\theta_k)\, \Delta t + d^x_k,\\
+    y_{k+1} &= y_k + v \sin(\theta_k)\, \Delta t + d^y_k,\\
+    \theta_{k+1} &= \theta_k + u_k\, \Delta t,
+    \end{aligned}
+    \]
+    with $\|d_k\| \le d_{\max}$.
+    \item Develop the robust constraints by ensuring that the obstacle avoidance constraint holds for all disturbances.
+    \item Formulate the min-max problem:
+    \[
+    \min_{U} \max_{d_k \in \mathcal{D}} J(U, d),
+    \]
+    and discuss possible relaxations or approximations.
+\end{enumerate}
+
+\subsection{Tube-Based MPC}
+\begin{enumerate}[label=\arabic*.]
+    \item Define a nominal system and an error dynamics for the deviation due to disturbances.
+    \item Design a feedback controller to keep the error bounded, and tighten the constraints accordingly.
+    \item Formulate the nominal MPC with tightened constraints to guarantee that the actual state remains within a tube around the nominal trajectory.
+\end{enumerate}
+
+\subsection{Task}
+\begin{enumerate}[label=\arabic*.]
+    \item Implement a robust MPC controller using one of the approaches above (or both for comparison).
+    \item Analyze the performance of your robust MPC in simulation under different disturbance bounds $d_{\max}$.
+    \item Compare your results with the standard MPC from Part I.
+\end{enumerate}
+
+\section{Part III: CBF-Based Safety Filtering}
+\textbf{Objective:} Design a safety filter using Control Barrier Functions (CBF) that modifies a nominal control input $u_{\text{nom}}$ to ensure safety with respect to obstacles.
+
+\subsection{Barrier Function and its Derivatives}
+For each obstacle $(o_x, o_y, r)$, define the barrier function:
+\[
+h(x,y) = (x - o_x)^2 + (y - o_y)^2 - (r + \delta)^2.
+\]
+Its time derivative is:
+\[
+\dot{h}(x,y,\theta) = 2 v \left[ (x - o_x) \cos(\theta) + (y - o_y) \sin(\theta) \right].
+\]
+A simplified second derivative approximation can be written as:
+\[
+L_f^2 h(x,y,\theta) = 2v^2 + 2\lambda \dot{h}(x,y,\theta) + \lambda^2 h(x,y),
+\]
+and the control-dependent term:
+\[
+L_g L_f h(x,y,\theta) = 2v \left[ (y - o_y) \cos(\theta) - (x - o_x) \sin(\theta) \right].
+\]
+
+\subsection{CBF Constraint}
+The safety condition is enforced by:
+\[
+L_f^2 h(x,y,\theta) + L_g L_f h(x,y,\theta) \, u \ge 0.
+\]
+
+\subsection{QP Formulation}
+Formulate the following Quadratic Program (QP) to obtain the safe control input $u_{\text{safe}}$:
+\[
+\begin{aligned}
+\min_{u} \quad & \frac{1}{2}(u - u_{\text{nom}})^2 \\
+\text{s.t.} \quad & L_f^2 h(x,y,\theta) + L_g L_f h(x,y,\theta) \, u \ge 0, \quad \forall \text{ obstacles}, \\
+& u \in [-w_{\max}, w_{\max}].
+\end{aligned}
+\]
+You are required to solve this QP using CVXPY.
+
+\subsection{Task}
+\begin{enumerate}[label=\arabic*.]
+    \item Derive the expressions for $h$, $\dot{h}$, $L_f^2h$, and $L_gL_fh$.
+    \item Implement the QP in CVXPY that outputs $u_{\text{safe}}$.
+    \item Validate your safety filter by comparing the trajectories generated using the nominal controller versus the safety-filtered control.
+\end{enumerate}
+
+\section{Part IV: Simulation and Comparative Analysis}
+\textbf{Objective:} Evaluate and compare the performance of the Standard MPC, Robust MPC, and CBF-based Safety Filter under various scenarios.
+
+\subsection{Simulation Setup}
+\begin{enumerate}[label=\arabic*.]
+    \item Define the simulation parameters: time step $\Delta t$, prediction horizon $N$, constant speed $v$, control bounds $w_{\max}$, and safety margin $\delta$.
+    \item Set up initial conditions and goal positions.
+    \item Consider multiple scenarios by varying:
+    \begin{itemize}
+        \item Disturbance bounds $d_{\max}$ for the robust MPC.
+        \item Obstacle configurations.
+        \item Presence or absence of disturbances in the simulation.
+    \end{itemize}
+\end{enumerate}
+
+\subsection{Performance Metrics}
+Compare the methods based on:
+\begin{enumerate}[label=\arabic*.]
+    \item \textbf{Goal Convergence:} Distance to goal over time.
+    \item \textbf{Constraint Violation:} Minimum distance to obstacles.
+    \item \textbf{Control Effort:} Magnitude and smoothness of the control input.
+\end{enumerate}
+
+\subsection{Task}
+\begin{enumerate}[label=\arabic*.]
+    \item Simulate each control method and plot the resulting trajectories.
+    \item Provide a quantitative and qualitative comparison of the controllers.
+    \item Discuss the trade-offs between performance and robustness for each method.
+\end{enumerate}
+
+\section{Submission Instructions}
+\begin{itemize}
+    \item Submit your annotated code files (in Python) along with a brief report (PDF) summarizing your results and observations.
+    \item Include plots comparing the trajectories and control inputs for the different methods.
+    \item Provide detailed explanations of your implementation choices and any assumptions made.
+\end{itemize}
+
+\section{Bonus}
+For extra credit, implement both min-max MPC and tube-based MPC, and compare their performance in environments with high disturbance levels.
+
+\end{document}
