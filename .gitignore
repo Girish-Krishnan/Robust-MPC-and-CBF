@@ -1,0 +1,7 @@
+*.zip
+*.DS_Store
+__pycache__/
+*.egg-info/
+*.egg
+*.log
+*.out

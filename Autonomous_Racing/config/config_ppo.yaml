@@ -1,0 +1,20 @@
+model:
+  policy: "MultiInputPolicy"
+  n_steps: 2048
+  learning_rate: 0.0003
+  batch_size: 64
+  n_epochs: 10
+  gamma: 0.99
+  gae_lambda: 0.95
+  clip_range: 0.2
+  ent_coef: 0.01
+  vf_coef: 0.5
+  max_grad_norm: 0.5
+  verbose: 2
+
+training:
+  num_obstacles: 200
+  model_inputs: ["pose", "velocity", "steering", "depth"] # This should be a subset of ["pose", "velocity", "steering", "depth"], but must include "depth"
+  total_timesteps: 10000
+  num_envs: 4
+  device: "mps" # Change to "cuda" for Nvidia or "cpu" for CPU
